@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project-base_render</title>
+  <link rel="stylesheet" href="./css/index.css">
+</head>
+
+<body>
+  <div id="toast"></div>
+  
+  <div class="page">
+    <h3>在线设备</h3>
+    <div class="page-content">
+      <!-- 设备列表 -->
+      <div id="list" onclick="clickListDom(event)"></div>
+      <!-- 抽屉遮罩 -->
+      <div class="drawer-cover" id="drawerCover"></div>
+      <!-- 灯光抽屉 -->
+      <div class="drawer" id="drawer">
+        <h4 id="drawerTitle"></h4>
+        <h5>颜色</h5>
+        <div id="colorPicker" class="color-picker" onclick="clickColorPicker(event)"></div>
+        <h5>亮度</h5>
+        <input type="range" id="brightSlider" class="bright-slider" name="slider" min="0" max="100" value="50"
+          onchange="onBrightnessChange(event)">
+        <h5>开关</h5>
+        <div class="power">
+          <div id="powerBtn" class="power-btn" onclick="switchPower()"></div>
+        </div>
+      </div>
+
+      <!-- 插座抽屉 -->
+      <div class="drawer-cover"></div>
+      <div class="drawer" id="drawer_plug">
+        <h4 id="drawerPlugTitle"></h4>
+        <h5>开关</h5>
+        <div class="power">
+          <div id="powerPlugBtn" class="power-btn-plug" onclick="switchPlugPower()"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+
+<script src="./libs/axios.min.js"></script>
+<script src="./libs/socket.js"></script>
+<script src="./libs/sdk.min.js"></script>
+<script>
+  // 创建一个模拟的设备列表数据
+  let deviceList = []
+  let selectedDevice = {}
+  let rtv = {
+    state: 'off',
+    bright: 0,
+    color: [255, 255, 255]
+  }
+  let rtv_plug={
+    state:"off"
+  }
+
+
+  const listDom = document.getElementById('list')
+
+  const COLORS = [[255, 0, 0], [255, 165, 0], [255, 255, 0], [0, 128, 0], [0, 255, 255], [0, 0, 255], [128, 0, 128], [255, 255, 255]]
+  const colorPicker = document.getElementById('colorPicker')
+
+  const brightSliderDom = document.getElementById('brightSlider')
+
+  const powerBtnDom = document.getElementById('powerBtn')
+  const powerBtnPlugDom = document.getElementById('powerPlugBtn')
+
+  init().catch(console.error)
+
+  // 页面初始化
+  async function init() {
+    initRenderColorPicker()
+    await initEdgerToken()
+    initSocket()
+    deviceList = await getDeviceList()
+    renderList()
+    initPermission()
+  }
+
+  // 初始化应用设备权限
+  function initPermission(devid) {
+    let devids = []
+    if (devid) {
+      devids = [devid]
+    } else {
+      devids = deviceList.map(item => item.devid)
+    }
+    edger.permission.request({
+      code: devids,
+      type: 'devices'
+    })
+  }
+
+
+  let edgerToken = '' // 爱智Token
+  let edgerSrand = '' // 爱智随机数
+  function initEdgerToken() {
+    edger.onAction('token', (data) => {
+      console.log('token changed:', data)
+      if (data && data.token) {
+        edgerToken = data.token
+      }
+      if (data && data.srand) {
+        edgerSrand = data.srand
+      }
+    })
+
+    return new Promise((resolve, reject) => {
+      edger
+        .token()
+        .then((data) => {
+          console.log('token:', data)
+          if (data && data.token) {
+            edgerToken = data.token
+          }
+          if (data && data.srand) {
+            edgerSrand = data.srand
+          }
+          if (edgerToken && edgerSrand) {
+            resolve(true)
+          } else {
+            reject(false)
+          }
+        })
+        .catch((error) => {
+          reject(error)
+        })
+    })
+
+
+
+  }
+
+  // 查询设备列表
+  async function getDeviceList() {
+    const res = await axios.get('/api/device/list', {
+      headers: { // 未开启非安全模式，请求头需添加下面俩个参数
+        'edger-token': edgerToken,
+        'edger-srand': edgerSrand
+      }
+    })
+    if (res.status === 200) {
+      const respData = res.data
+      if (respData.code === 1) {
+        return respData.data
+      } else {
+        throw new Error(respData.msg)
+      }
+    } else {
+      throw new Error(res.status)
+    }
+  }
+
+
+  // 渲染列表内容
+  function renderList() {
+    // 渲染内容是往list元素下追加节点，所以需要先清空之前的数据，否则会重复渲染
+    clearListRender()
+    if (deviceList.length) {
+      for (let index = 0; index < deviceList.length; index++) {
+        const dev = deviceList[index]
+        // 创建一个div的标签元素
+        const dom = document.createElement('div')
+        // 给div设置显示的文本
+        dom.innerText = `${dev.label}_${dev.devid}`
+        // 给div设置类名，类的css样式提前写好
+        if(dev.type === 'light.belt') 
+          dom.className = 'list-light'
+        else
+          dom.className = 'list-plug'
+        // 给div元素标记缓存devid，方便后面操作
+        dom.dataset.devid = dev.devid
+        // 将构建好的div元素追加到list元素下面，在页面中就会显示出来了
+        listDom.appendChild(dom)
+      }
+    } else {
+      const dom = document.createElement('div')
+      dom.innerText = '未发现任何设备'
+      dom.style.textAlign = 'center'
+      dom.style.color = '#ccc'
+      dom.style.marginTop = '48px'
+      listDom.appendChild(dom)
+    }
+  }
+
+  // 清空list元素下的内容
+  function clearListRender() {
+    listDom.innerHTML = ''
+  }
+
+  // 点击list元素区域
+  function clickListDom(e) {
+    const target = e.target
+    if (target.classList.contains('list-light')) {
+      let devid = target.dataset.devid
+      let dev = deviceList.find(item => item.devid === devid)
+      selectedDevice = dev
+      // 抽屉弹出
+      renderDrawer(selectedDevice)
+    }
+    if (target.classList.contains('list-plug')) {
+      let devid = target.dataset.devid
+      let dev = deviceList.find(item => item.devid === devid)
+      selectedDevice = dev
+      // 抽屉弹出
+      renderPlugDrawer(selectedDevice)
+    }
+  }
+
+  const drawerDom = document.getElementById('drawer')
+  const drawerTitleDom = document.getElementById('drawerTitle')
+  const drawerCoverDom = document.getElementById('drawerCover')
+  
+  drawerCoverDom.addEventListener('click', hiddenDrawer)
+
+  // 显示灯光抽屉
+  function renderDrawer(dev) {
+    drawerDom.classList.add('drawer--show')
+    drawerTitleDom.innerText = dev.label
+    drawerCoverDom.classList.add('drawer-cover--show')
+    // 同步该设备最新数据
+    control(dev.devid, {
+      method: 'get',
+      data: ["state", "bright", "color"]
+    }).catch(console.error)
+  }
+
+  const drawerPlugDom = document.getElementById('drawer_plug')
+  const drawerPlugTitleDom = document.getElementById('drawerPlugTitle')
+  // 插座抽屉
+  function renderPlugDrawer(dev) {
+    drawerPlugDom.classList.add('drawer--show')
+    drawerPlugTitleDom.innerText = dev.label
+    drawerCoverDom.classList.add('drawer-cover--show')
+    // 同步该设备最新数据
+    control(dev.devid, {
+      method: 'get',
+      data: ["state"]
+    }).catch(console.error)
+  }
+
+  // 隐藏抽屉
+  function hiddenDrawer() {
+    drawerDom.classList.remove('drawer--show')
+    drawerPlugDom.classList.remove('drawer--show')
+    drawerCoverDom.classList.remove('drawer-cover--show')
+  }
+
+  // 初始化颜色面板渲染
+  function initRenderColorPicker() {
+    COLORS.forEach(item => {
+      const div = document.createElement('div')
+      div.className = 'color-picker_item'
+      div.dataset.color = JSON.stringify(item)
+      div.style.backgroundColor = `RGB(${item[0]}, ${item[1]}, ${item[2]})`
+      colorPicker.appendChild(div)
+    })
+  }
+
+  let toastDelayTimer
+  const toast = document.getElementById('toast')
+  function showToast(msg) {
+    toast.innerHTML = msg
+    toast.style.display = 'block'
+    clearTimeout(toastDelayTimer)
+    toastDelayTimer = setTimeout(() => {
+      toast.style.display = 'none'
+    }, 2000)
+  }
+
+  // 点击切换氛围灯颜色
+  function clickColorPicker(e) {
+    const target = e.target
+    if (target.classList.contains('color-picker_item')) {
+      // 是子元素
+      const targetColor = JSON.parse(target.dataset.color)
+      const data = {
+        method: "set",
+        data: {
+          color: targetColor
+        }
+      }
+      control(selectedDevice.devid, data).catch(console.warn)
+    }
+  }
+
+  // 拖拽亮度滑动条控制亮度
+  function onBrightnessChange(event) {
+    control(selectedDevice.devid, {
+      method: 'set',
+      data: {
+        bright: Number(event.target.value)
+      }
+    })
+  }
+
+  // 开关氛围灯
+  function switchPower() {
+    const state = rtv.state === 'on' ? 'off' : 'on'
+    //测定
+    console.log('message: ', state)
+
+    control(selectedDevice.devid, {
+      method: 'set',
+      data: {
+        state
+      }
+    })
+  }
+
+  // 开关插座
+  function switchPlugPower() {
+    const state = rtv_plug.state === 'on' ? 'off' : 'on'
+    //测定
+    console.log('message: ', state)
+
+    control(selectedDevice.devid, {
+      method: 'set',
+      data: {
+        state
+      }
+    })
+  }
+
+  // 发送控制设备请求
+  async function control(devid, data) {
+    const res = await axios.post('/api/device/control', {
+      devid,
+      data
+    }, {
+      headers: { // 未开启非安全模式，请求头需添加下面俩个参数
+        'edger-token': edgerToken,
+        'edger-srand': edgerSrand
+      }
+    })
+    if (res.status === 200) {
+      if (res.data.code === 2) {
+        // 无权限
+        showToast('无权限，请到设置中开启权限后重试')
+      }
+    } else {
+      throw new Error(res.status)
+    }
+  }
+
+  // 更新颜色面板渲染
+  let colorPickerIdx = -1
+  function updateColorPickerRender(color) {
+    const idx = COLORS.findIndex(item => item[0] === color[0] && item[1] === color[1] && item[2] === color[2])
+    if (idx >= 0) {
+      if (idx !== colorPickerIdx) {
+        colorPicker.childNodes[colorPickerIdx]?.classList.remove('color-picker_item--selected')
+        colorPicker.childNodes[idx].classList.add('color-picker_item--selected')
+        colorPickerIdx = idx
+      }
+    }
+  }
+
+  // 更新亮度滑动条渲染
+  function updateBrightSliderRender(bright) {
+    brightSliderDom.value = bright
+  }
+
+  // 更新开关状态渲染
+  function updatePowerRender(state) {
+    if (state === 'on') {
+      powerBtnDom.classList.add('power-btn_on')
+    } else {
+      powerBtnDom.classList.remove('power-btn_on')
+    }
+  }
+
+  // 更新插座状态渲染
+  function updatePowerPlugRender(state) {
+    if (state === 'on') {
+      powerBtnPlugDom.classList.add('power-btn_on-plug')
+    } else {
+      powerBtnPlugDom.classList.remove('power-btn_on-plug')
+    }
+  }
+
+  function initSocket() {
+    const socketClient = io({
+      query: {
+        'edger-token': edgerToken,
+        'edger-srand': edgerSrand
+      },
+      transports: ['websocket']
+    })
+    socketClient.on('connect', () => {
+      console.info('连接上后端socket服务了！！！')
+    })
+    // 监听设备上线
+    socketClient.on('device-join', async (devid) => {
+      deviceList = await getDeviceList()
+      renderList()
+      initPermission(devid)
+    })
+    // 监听设备离线
+    socketClient.on('device-lost', async (devid) => {
+      deviceList = await getDeviceList()
+      renderList()
+    })
+    // 监听设备实时值
+    socketClient.on('device-rtv', (params) => {
+      const is=deviceList.find(item => item.devid === params.devid)
+      if (is !== undefined) {
+        rtv = { ...rtv, ...params.data }
+        console.log('device-rtv: ', rtv)
+        // 更新渲染
+        if (params.data.state !== undefined) {
+          updatePowerRender(params.data.state)
+        }
+        if (params.data.bright !== undefined) {
+          updateBrightSliderRender(params.data.bright)
+        }
+        if (params.data.color !== undefined) {
+          updateColorPickerRender(params.data.color)
+        }
+      }
+    })
+
+    socketClient.on('device-rtv', (params) => {
+      const is=deviceList.find(item => item.devid === params.devid)
+      if (is !== undefined) {
+        rtv_plug = { ...rtv_plug, ...params.data }
+        console.log('device-rtv: ', rtv_plug)
+        // 更新渲染
+        if (params.data.state !== undefined) {
+          updatePowerPlugRender(params.data.state)
+        }
+      }
+    })
+  }
+
+
+</script>
+
+</html>
