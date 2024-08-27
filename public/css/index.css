@@ -60,6 +60,14 @@ h3 {
   margin: 8px;
 }
 
+.list-Info {
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 0 5px 0 #e32626;
+  border-radius: 16px;
+  margin: 8px;
+}
+
 .drawer-cover {
   position: absolute;
   top: 0;
@@ -141,6 +149,9 @@ h3 {
 .power-btn_on {
   background-image: url('../images/power_on.svg');
 }
+
+
+/* plug的开关 */
 .power-btn-plug {
   width: 48px;
   height: 48px;
@@ -152,6 +163,17 @@ h3 {
 .power-btn_on-plug {
   background-image: url('../images/power_on.svg');
 }
+
+/* 信息展示 */
+.info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 24px;
+  color: #0b0b0b;
+}
+
 #toast {
   display: none;
   position: fixed;

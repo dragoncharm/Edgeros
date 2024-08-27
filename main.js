@@ -26,11 +26,7 @@ devManager.on('device-lost', (devid) => {
 })
 devManager.on('message', (params) => {
 	const { devid, msg } = params
-	console.log('message: ', devid, msg)
-
-	// if (message = devManager.validDeviceSupport(dev.devid)) {
-	// 	socketIO.emitMessage(message, {device,data:msg.data})
-	// }
+	console.log('message: ', devid, msg)  //控制台输出
 	
 	socketIO.emitMessage('device-rtv', { devid, data: msg.data })  //重点，明天更新这个地方
 })

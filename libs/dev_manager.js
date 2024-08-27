@@ -130,8 +130,17 @@ class Dev extends EventEmitter {
         if (dev) {
             if(dev.type === 'light.belt' && dev.brand === '核芯科技HXKJ' && dev.model === 'RGB-01')
                 return 1
-            if(1)
-                return 1
+            if(dev.type === 'plug' && dev.brand === '核芯科技HXKJ' && dev.model === 'CZ02A-J')
+                return 2
+            if(dev.type === 'curtains' && dev.brand === '核芯科技HXKJ' && dev.model === 'CL01')
+                return 3
+            if(dev.type === 'sensor.ch4' && dev.brand === '核芯科技HXKJ' && dev.model === 'TRQ-02')
+                return 4
+            if(dev.type === 'sensor.pm2.5' && dev.brand === '核芯科技HXKJ' && dev.model === 'PM2.5-01')
+                return 5
+        }
+        else {
+            return 0
         }
     }
 }

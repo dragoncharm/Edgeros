@@ -40,7 +40,23 @@
         <div class="power">
           <div id="powerPlugBtn" class="power-btn-plug" onclick="switchPlugPower()"></div>
         </div>
-      </div>
+      </div>   
+         
+      <!-- 环境传感器抽屉 -->
+      <div class="drawer-cover"></div>
+      <div class="drawer" id="drawer_sensor_pm2.5">
+        <h4 id="drawerSensorTitle"></h4>
+        <h5>显示</h5>   <!-- 后面可以加时间显示-->
+        <div class="power">
+          <span id="pm" style="display:block;margin:0 auto"></span>
+          <span id="temp" style="display:block;margin:0 auto"></span>
+          <span id="humi" style="display:block;margin:0 auto"></span>     
+        <button id="powerSensorBtn" class="power-btn-sensor"  onclick="SensorInfo(event)">  刷新  </button>                           
+          <!-- <div id="powerSensorBtn" class="power-btn-sensor" onclick="SensorInfo()">Info</div> -->
+          <!-- 无用的id  -->
+        </div>
+      </div>   
+      
 
     </div>
   </div>
@@ -50,10 +66,15 @@
 <script src="./libs/axios.min.js"></script>
 <script src="./libs/socket.js"></script>
 <script src="./libs/sdk.min.js"></script>
+<!-- <script src="./light.js"></script> -->
+<!-- <script src="./plug.js"></script> -->
+<script src="./socket.js"></script>
+
 <script>
   // 创建一个模拟的设备列表数据
   let deviceList = []
   let selectedDevice = {}
+
   let rtv = {
     state: 'off',
     bright: 0,
@@ -62,6 +83,16 @@
   let rtv_plug={
     state:"off"
   }
+  let rtv_sensorch={
+    state:"off",
+    value: 0
+  }
+  let rtv_sensor={
+    PM : 100, 
+    temp : 25.35, 
+    humi : 50.50 
+  }
+
 
 
   const listDom = document.getElementById('list')
@@ -71,10 +102,14 @@
 
   const brightSliderDom = document.getElementById('brightSlider')
 
-  const powerBtnDom = document.getElementById('powerBtn')
-  const powerBtnPlugDom = document.getElementById('powerPlugBtn')
+  const powerBtnDom = document.getElementById('powerBtn')    // 灯的开关状态渲染
+  const powerBtnPlugDom = document.getElementById('powerPlugBtn')  //插座的状态渲染
 
-  init().catch(console.error)
+  // const powerBtnDom = document.getElementById('powerBtn')
+  // const powerBtnPlugDom = document.getElementById('powerPlugBtn')
+
+
+  init().catch(console.error)   //init
 
   // 页面初始化
   async function init() {
@@ -175,8 +210,10 @@
         // 给div设置类名，类的css样式提前写好
         if(dev.type === 'light.belt') 
           dom.className = 'list-light'
-        else
+        else if(dev.type === 'plug')
           dom.className = 'list-plug'
+        else 
+          dom.className = 'list-Info'   //保留
         // 给div元素标记缓存devid，方便后面操作
         dom.dataset.devid = dev.devid
         // 将构建好的div元素追加到list元素下面，在页面中就会显示出来了
@@ -214,6 +251,14 @@
       // 抽屉弹出
       renderPlugDrawer(selectedDevice)
     }
+    if (target.classList.contains('list-Info')) {
+      let devid = target.dataset.devid
+      let dev = deviceList.find(item => item.devid === devid)
+      selectedDevice = dev
+      // 抽屉弹出
+      renderSensorDrawer(selectedDevice)
+    }
+
   }
 
   const drawerDom = document.getElementById('drawer')
@@ -248,10 +293,28 @@
     }).catch(console.error)
   }
 
+
+  //环境传感器抽屉
+  const drawerSensorDom = document.getElementById('drawer_sensor_pm2.5')
+  const drawerSensorTitleDom = document.getElementById('drawerSensorTitle')
+  
+  function renderSensorDrawer(dev) {
+    drawerSensorDom.classList.add('drawer--show')
+    drawerSensorTitleDom.innerText = dev.label
+    drawerCoverDom.classList.add('drawer-cover--show')
+    // 同步该设备最新数据
+    control(dev.devid, {
+      method: 'get',
+      data: ["PM2.5", "temp","humi",]
+    }).catch(console.error)
+  }
+
+
   // 隐藏抽屉
   function hiddenDrawer() {
     drawerDom.classList.remove('drawer--show')
     drawerPlugDom.classList.remove('drawer--show')
+    drawerSensorDom.classList.remove('drawer--show')
     drawerCoverDom.classList.remove('drawer-cover--show')
   }
 
@@ -321,7 +384,7 @@
   function switchPlugPower() {
     const state = rtv_plug.state === 'on' ? 'off' : 'on'
     //测定
-    console.log('message: ', state)
+    console.log('plug_message: ', state)
 
     control(selectedDevice.devid, {
       method: 'set',
@@ -330,6 +393,27 @@
       }
     })
   }
+
+    // sensor信息显示
+  function SensorInfo(e) {
+    //测定
+    const target = e.target
+    const data = {
+      "method": "get",
+      "data": ["PM2.5", "temp", "humi"]
+    }
+    sensor = control(selectedDevice.devid, data)
+
+    document.getElementById("pm").innerHTML = "PM2.5:" + rtv_sensor["PM2.5"];
+    document.getElementById("temp").innerHTML = "temp:" + rtv_sensor.temp
+    document.getElementById("humi").innerHTML = "humi:" + rtv_sensor.humi
+    // const PM =document.getElementById("PM")
+    // PM.textContent = `Sensor Info: ${rtv_sensor.temp}`;
+
+  }
+
+
+
 
   // 发送控制设备请求
   async function control(devid, data) {
@@ -379,7 +463,7 @@
     }
   }
 
-  // 更新插座状态渲染
+  // 更新插座开关状态渲染
   function updatePowerPlugRender(state) {
     if (state === 'on') {
       powerBtnPlugDom.classList.add('power-btn_on-plug')
@@ -440,9 +524,30 @@
         }
       }
     })
+    socketClient.on('device-rtv', (params) => {
+        const is = deviceList.find(item => item.devid === params.devid)
+        if (is !== undefined) {
+            rtv_sensor = { ...rtv_sensor, ...params.data }
+            console.log('device-rtv: ', rtv_sensor)
+        
+        if(rtv_sensor.temp >= 28 ){
+          //測試
+          control("nw.b867fafe806cdf46",{
+            method: "set",
+            data: {
+              color: [255,0,0]
+            }
+          })
+        }
+            
+        }
+    //socketClient.send( data)  
+      })
+
+
   }
 
 
-</script>
+// </script>
 
-</html>
+// </html>

@@ -1,6 +1,6 @@
 {
-    "name": "lbk_project",
-    "bundleid": "com.bang.lbkproject",
+    "name": "three_project",
+    "bundleid": "com.lbk.threeproject",
     "ignore_modules": [
         "@edgeros/eslint-plugin-jsre",
         "@edgeros/jsre-types"
